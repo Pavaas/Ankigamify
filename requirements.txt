@@ -1,0 +1,16 @@
+# Required Python packages
+streamlit
+pytesseract
+PyMuPDF
+SpeechRecognition
+Pillow
+genanki
+imageio
+easyocr
+requests
+transformers
+nltk
+python-docx
+pdf2image
+youtube-transcript-api
+beautifulsoup4
