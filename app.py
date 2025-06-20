@@ -1,53 +1,70 @@
 import streamlit as st
-import os
 from utils.loader import load_input_file
 from utils.flashcard_generator import generate_flashcards
-from utils.exporter import export_flashcards
-from utils.ui import show_pdf_viewer, sidebar_pipeline, show_footer
-from utils.memo_card import generate_memo_cards
+from utils.exporter import export_to_apkg, export_to_csv
+from components.sidebar import render_sidebar
+from components.pdf_viewer import render_pdf_viewer
+from components.theme_toggle import dark_light_theme_toggle
+from components.pipeline_visualizer import show_pipeline_status
 
-st.set_page_config(page_title="AnkiGamify", layout="wide")
-
-# --- Sidebar & Branding ---
-sidebar_pipeline()
-
-st.title("🧠 AnkiGamify - AI Flashcard Generator")
-st.markdown("Create high-quality flashcards like AnKing/UWorld from PDFs, Docs, YouTube, and more.")
-
-# --- File Upload Section ---
-uploaded_file = st.file_uploader(
-    "📤 Upload PDF, DOCX, EPUB, TXT, MP3, or paste a YouTube link",
-    type=["pdf", "docx", "epub", "txt", "mp3"]
+# --- Page Setup ---
+st.set_page_config(
+    page_title="AnkiGamify",
+    page_icon="🧠",
+    layout="wide",
 )
 
-yt_link = st.text_input("Or paste a YouTube link:")
+# --- Theme Toggle ---
+dark_light_theme_toggle()
 
-if uploaded_file or yt_link:
-    with st.spinner("🔍 Processing input..."):
-        raw_text, page_map = load_input_file(uploaded_file, yt_link)
-        if not raw_text:
-            st.error("Failed to process file/link.")
-        else:
-            st.success("✅ Content loaded successfully.")
-            show_pdf_viewer(uploaded_file)
+# --- Sidebar ---
+render_sidebar()
 
-            # --- Flashcard Generation Section ---
-            st.markdown("---")
-            st.header("🧩 Flashcard Settings")
-            card_type = st.selectbox("Choose card type", ["Basic", "Cloze", "Memo Card", "AnKing-style"])
+# --- Main Header ---
+st.markdown("## 🧠 AnkiGamify: AI-Powered Flashcard Wizard")
+st.markdown("Turn PDFs, YouTube, Audio, and Notes into Anki-Ready Cards")
 
-            if st.button("🎯 Generate Flashcards"):
-                with st.spinner("🧠 Thinking... Generating cards..."):
-                    if card_type == "Memo Card":
-                        cards = generate_memo_cards(raw_text, page_map)
-                    else:
-                        cards = generate_flashcards(raw_text, card_type)
-                    
-                    if cards:
-                        st.success(f"✅ Generated {len(cards)} flashcards!")
-                        export_flashcards(cards)
-                    else:
-                        st.warning("😕 No flashcards were generated.")
+# --- Input Upload ---
+uploaded_file = st.file_uploader("📂 Upload your study material", type=["pdf", "txt", "docx", "epub", "mp3", "wav"])
+if uploaded_file:
+    with st.spinner("🧪 Processing file..."):
+        text, page_map = load_input_file(uploaded_file)
+        st.success("✅ File processed successfully!")
 
-# --- Footer ---
-show_footer()
+        # Optional PDF preview
+        if uploaded_file.name.endswith(".pdf"):
+            render_pdf_viewer(uploaded_file)
+
+        # Pipeline status
+        show_pipeline_status(stage="Peristalsis")
+
+        # Generate Flashcards
+        flashcards = generate_flashcards(text, page_map)
+
+        if flashcards:
+            st.success(f"✅ {len(flashcards)} flashcards generated!")
+            st.write("---")
+            for i, card in enumerate(flashcards, 1):
+                st.markdown(f"### Card {i}")
+                st.markdown(card["question"], unsafe_allow_html=True)
+                if card["type"] == "memo":
+                    st.info(f"📝 Memo Explanation: {card['answer']}")
+                else:
+                    st.markdown(f"**Answer:** {card['answer']}")
+
+            # Export Options
+            st.write("---")
+            st.markdown("### 📤 Export Flashcards")
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("⬇️ Export to .apkg"):
+                    export_to_apkg(flashcards, deck_name="AnkiGamify_Deck")
+                    st.success("Saved as Anki Deck!")
+            with col2:
+                if st.button("📁 Export to .csv"):
+                    export_to_csv(flashcards)
+                    st.success("Saved as CSV File!")
+
+# Footer
+st.markdown("---")
+st.markdown("📬 Contact: [Instagram](https://www.instagram.com/dr.pavanreddy) | [Email](mailto:Pavanreddy337@gmail.com) | [GitHub](https://github.com/Pavaas)")
