@@ -1,91 +1,24 @@
-import streamlit as st, subprocess, tempfile
+import streamlit as st
+from utils.extract import load_input_source
+from utils.summarizer import summarize
+from utils.flashcards import generate_cards
+from utils.exporter import download_csv, download_apkg
+from ui.layout import show_header, show_preview, show_exports
 
-def load_file(uploaded_file):
-    ext = uploaded_file.name.split('.')[-1].lower()
-    text = ""
-    if ext == 'pdf':
-        import fitz
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
-            tmp.write(uploaded_file.read())
-        doc = fitz.open(tmp.name)
-        text = "\n".join(page.get_text() for page in doc)
-        if not text.strip():
-            text = perform_ocr(tmp.name)
-    elif ext == 'txt':
-        text = uploaded_file.read().decode('utf-8')
-    elif ext == 'docx':
-        import docx
-        doc = docx.Document(uploaded_file)
-        text = "\n".join(p.text for p in doc.paragraphs)
-    else:
-        text = "Unsupported file type"
-    return text
+st.set_page_config(page_title="AnkiGamify", layout="wide")
+show_header()
 
-def perform_ocr(pdf_path):
-    from pdf2image import convert_from_path
-    import pytesseract
-    pages = convert_from_path(pdf_path)
-    text = ""
-    for i, page in enumerate(pages):
-        st.info(f"OCR processing page {i+1}/{len(pages)}")
-        text += pytesseract.image_to_string(page)
-    return text
+source, raw_text = load_input_source()
 
-def summarize(text):
-    prompt = f"Summarize this text:\n{text[:1000]}"
-    try:
-        result = subprocess.run(["ollama", "run", "mistral", prompt], capture_output=True, text=True, check=True)
-        return result.stdout.strip()
-    except Exception as e:
-        return f"AI failed: {e}"
+if raw_text:
+    show_preview("📄 Extracted/Input Text", raw_text)
 
-def generate_flashcards(summary):
-    cards = []
-    for s in summary.split('.'):
-        s = s.strip()
-        if len(s) > 20:
-            cards.append({
-                "question": f"What about: {s[:30]}...?",
-                "answer": s
-            })
-    return cards[:10]
-
-def export_to_apkg(cards, file_path):
-    import genanki
-    model = genanki.Model(
-        1607392319, 'AnkiGamifyModel',
-        fields=[{'name':'Question'},{'name':'Answer'}],
-        templates=[{
-            'name': 'Card',
-            'qfmt': '{{Question}}',
-            'afmt': '{{FrontSide}}<hr>{{Answer}}'
-        }]
-    )
-    deck = genanki.Deck(2059400110, 'AnkiGamifyDeck')
-    for c in cards:
-        note = genanki.Note(model=model, fields=[c['question'], c['answer']])
-        deck.add_note(note)
-    genanki.Package(deck).write_to_file(file_path)
-
-st.title("🃏 AnkiGamify")
-
-uploaded_file = st.file_uploader("Upload PDF, TXT, or DOCX", type=['pdf','txt','docx'])
-
-if uploaded_file:
-    text = load_file(uploaded_file)
-    st.text_area("Extracted Text", text[:1000]+"..." if len(text)>1000 else text, height=200)
-
-    if st.button("Generate Flashcards"):
-        summary = summarize(text)
-        st.subheader("Summary")
-        st.write(summary)
-
-        cards = generate_flashcards(summary)
-        st.subheader("Flashcards")
-        for i, c in enumerate(cards, 1):
-            st.markdown(f"**{i}. Q:** {c['question']}  \n**A:** {c['answer']}")
-
-        if st.button("Export to Anki (.apkg)"):
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".apkg") as tmp:
-                export_to_apkg(cards, tmp.name)
-                st.download_button("Download Anki Deck", open(tmp.name, "rb").read(), "ankigamify_deck.apkg")
+    if st.button("🧪 Summarize & Generate Cards"):
+        summary = summarize(raw_text)
+        st.success("Summary generated.")
+        st.markdown(f"**🔍 Summary:** {summary}")
+        cards = generate_cards(summary)
+        st.markdown("### 📇 Flashcards Preview")
+        for i, c in enumerate(cards):
+            st.markdown(f"**{i+1}.** Q: {c['question']}<br>A: {c['answer']}", unsafe_allow_html=True)
+        show_exports(cards)
